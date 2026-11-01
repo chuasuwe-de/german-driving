@@ -39,6 +39,21 @@ def main():
     if extra:
         print("提示：这些图片没有对应的数据条目，不会显示：", ", ".join(extra))
 
+    # 规则卡片
+    with open(os.path.join(ROOT, "rules", "rules.json"), encoding="utf-8") as f:
+        rules = json.load(f)
+    seen = set()
+    for r in rules["rules"]:
+        if r["id"] in seen:
+            raise SystemExit(f"重复的规则 id: {r['id']}")
+        seen.add(r["id"])
+        if r["cat"] not in rules["categories"]:
+            raise SystemExit(f"规则 {r['id']} 的类别 {r['cat']} 没有定义")
+        if r.get("img") and not os.path.exists(os.path.join(img_dir, r["img"] + ".svg")):
+            raise SystemExit(f"规则 {r['id']} 引用的图片不存在: {r['img']}")
+    data["ruleCategories"] = rules["categories"]
+    data["rules"] = rules["rules"]
+
     out = os.path.join(ROOT, "signs", "signs.js")
     with open(out, "w", encoding="utf-8") as f:
         f.write("// 由 tools/build.py 从 signs/signs.json 生成，不要手改。\n")
@@ -57,6 +72,11 @@ def main():
     drawn = sum(1 for s in data["signs"] if s["drawn"])
     rows.append(f"| **合计** | **{total}** | **{core}** |")
     table = "\n".join(rows) + f"\n\n{total} 个标志里 {total - drawn} 个用官方图，{drawn} 个是脚本画的示意图。"
+    rrows = ["| 主题 | 卡片数 |", "|---|---:|"]
+    for key, c in rules["categories"].items():
+        rrows.append(f"| {c['zh']} | {sum(1 for r in rules['rules'] if r['cat'] == key)} |")
+    rrows.append(f"| **合计** | **{len(rules['rules'])}** |")
+    table += "\n\n规则卡片：\n\n" + "\n".join(rrows)
 
     readme = os.path.join(ROOT, "README.md")
     if os.path.exists(readme):
@@ -67,7 +87,7 @@ def main():
             with open(readme, "w", encoding="utf-8") as f:
                 f.write(new)
 
-    print(f"写入 signs/signs.js：{total} 个标志，{core} 个重点，{drawn} 个自绘")
+    print(f"写入 signs/signs.js：{total} 个标志，{core} 个重点，{drawn} 个自绘；{len(rules['rules'])} 张规则卡片")
 
 
 if __name__ == "__main__":

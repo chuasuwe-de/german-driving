@@ -6,13 +6,17 @@
   const SIGNS = DATA.signs;
   const CATS = DATA.categories;
   const CAT_ORDER = Object.keys(CATS);
+  const RULES = DATA.rules || [];
+  const RCATS = DATA.ruleCategories || {};
+  const RCAT_ORDER = Object.keys(RCATS);
+  const SIGN_BY_ID = Object.fromEntries(SIGNS.map(s => [s.id, s]));
   const STORE_KEY = "gd-signs-progress-v1";
   const PREF_KEY = "gd-signs-prefs-v1";
 
   // ---------------------------------------------------------------- 状态
 
   let progress = load(STORE_KEY, {});           // id -> {ok, bad, streak, t}
-  let prefs = Object.assign({ mode: "browse", cat: "all", coreOnly: true, hideKnown: false, quizType: "img2zh" }, load(PREF_KEY, {}));
+  let prefs = Object.assign({ mode: "browse", cat: "all", coreOnly: true, hideKnown: false, quizType: "img2zh", rcat: "all", rsub: "cards" }, load(PREF_KEY, {}));
   let search = "";
   let current = null;                            // 翻卡 / 测验里当前的标志
   let revealed = false;
@@ -55,13 +59,24 @@
       (!q || (s.nr + " " + s.id + " " + s.de + " " + s.zh + " " + s.meaning).toLowerCase().includes(q)));
   }
 
+  // 规则卡片的筛选；学习记录用 "r:" 前缀和路标分开
+  const rid = r => "r:" + r.id;
+  function rulesPool() {
+    const q = search.trim().toLowerCase();
+    return RULES.filter(r =>
+      (prefs.rcat === "all" || r.cat === prefs.rcat) &&
+      (!prefs.hideKnown || level(rid(r)) < 3) &&
+      (!q || (r.q + " " + r.a + " " + (r.de || "") + " " + (r.note || "")).toLowerCase().includes(q)));
+  }
+
   // 抽下一张：没学过和刚错过的优先，掌握的偶尔复习
-  function pick(list) {
-    const cands = list.filter(s => s.id !== lastId);
+  function pick(list, key) {
+    key = key || (s => s.id);
+    const cands = list.filter(s => key(s) !== lastId);
     if (!cands.length) return list[0] || null;
     const now = Date.now();
     const w = cands.map(s => {
-      const r = rec(s.id), lv = level(s.id);
+      const r = rec(key(s)), lv = level(key(s));
       let x = lv === 0 ? 4 : lv === 1 ? 5 : lv === 2 ? 2.5 : 0.4;
       if (r.t && now - r.t > 86400e3) x += 1;        // 一天没见过的加一点
       if (r.t && now - r.t < 60e3) x *= 0.2;         // 刚刚见过的少出
@@ -94,22 +109,32 @@
   function renderFilters() {
     const chips = $("#cats");
     chips.innerHTML = "";
-    chips.append(h("button", { class: prefs.cat === "all" ? "on" : "", onclick: () => setCat("all") }, "全部"));
-    for (const k of CAT_ORDER) chips.append(h("button", { class: prefs.cat === k ? "on" : "", onclick: () => setCat(k) }, CATS[k].zh));
+    const rules = prefs.mode === "rules";
+    if (rules) {
+      chips.append(h("button", { class: prefs.rcat === "all" ? "on" : "", onclick: () => setRcat("all") }, "全部"));
+      for (const k of RCAT_ORDER) chips.append(h("button", { class: prefs.rcat === k ? "on" : "", onclick: () => setRcat(k) }, RCATS[k].zh));
+    } else {
+      chips.append(h("button", { class: prefs.cat === "all" ? "on" : "", onclick: () => setCat("all") }, "全部"));
+      for (const k of CAT_ORDER) chips.append(h("button", { class: prefs.cat === k ? "on" : "", onclick: () => setCat(k) }, CATS[k].zh));
+    }
     $("#coreOnly").checked = prefs.coreOnly;
+    $("#coreOnly").parentElement.style.display = rules ? "none" : "";
     $("#hideKnown").checked = prefs.hideKnown;
     document.querySelectorAll(".modes button").forEach(b => b.classList.toggle("on", b.dataset.mode === prefs.mode));
-    $("#search").style.display = prefs.mode === "browse" ? "" : "none";
+    $("#search").style.display = prefs.mode === "browse" || (rules && prefs.rsub === "list") ? "" : "none";
   }
   function setCat(c) { prefs.cat = c; save(); current = null; render(); }
+  function setRcat(c) { prefs.rcat = c; save(); current = null; render(); }
 
   function renderStat() {
-    const list = pool();
+    const rules = prefs.mode === "rules";
+    const list = rules ? rulesPool() : pool();
+    const key = rules ? rid : (s => s.id);
     const n = list.length;
-    const known = list.filter(s => level(s.id) === 3).length;
-    const learning = list.filter(s => level(s.id) === 2).length;
-    const bad = list.filter(s => level(s.id) === 1).length;
-    $("#stat").innerHTML = `<b>${n}</b> 个标志 · 已掌握 <b>${known}</b> · 学习中 ${learning} · 待复习 ${bad}` +
+    const known = list.filter(s => level(key(s)) === 3).length;
+    const learning = list.filter(s => level(key(s)) === 2).length;
+    const bad = list.filter(s => level(key(s)) === 1).length;
+    $("#stat").innerHTML = `<b>${n}</b> ${rules ? "张卡片" : "个标志"} · 已掌握 <b>${known}</b> · 学习中 ${learning} · 待复习 ${bad}` +
       `<span class="bar"><i style="width:${n ? Math.round(known / n * 100) : 0}%"></i></span>`;
   }
 
@@ -262,6 +287,115 @@
   }
   function nextQuiz() { lastId = current.id; current = null; answered = false; render(); }
 
+  // ---------------------------------------------------------------- 规则卡片
+
+  function ruleDistractors(r, n) {
+    const same = RULES.filter(x => x.id !== r.id && x.cat === r.cat && x.a !== r.a);
+    const other = RULES.filter(x => x.id !== r.id && x.cat !== r.cat && x.a !== r.a);
+    const out = [], seen = new Set([r.a]);
+    for (const x of shuffle(same).concat(shuffle(other))) {
+      if (out.length >= n) break;
+      if (seen.has(x.a)) continue;
+      seen.add(x.a); out.push(x);
+    }
+    return out;
+  }
+
+  function ruleImg(r) {
+    const s = r.img && SIGN_BY_ID[r.img];
+    return s ? h("img", { src: s.img, alt: s.de, class: "rule-img" }) : null;
+  }
+
+  function renderRules(main) {
+    const stage = h("div", { class: "stage" });
+    stage.append(h("div", { class: "quiz-type" },
+      h("button", { class: prefs.rsub === "cards" ? "on" : "", onclick: () => setRsub("cards") }, "翻卡"),
+      h("button", { class: prefs.rsub === "quiz" ? "on" : "", onclick: () => setRsub("quiz") }, "选择题"),
+      h("button", { class: prefs.rsub === "list" ? "on" : "", onclick: () => setRsub("list") }, "列表")));
+    if (prefs.rcat !== "all") stage.append(h("p", { class: "cat-note", style: "text-align:center" }, RCATS[prefs.rcat].note));
+    const list = rulesPool();
+    if (!list.length) { stage.append(h("div", { class: "empty" }, "这个范围里没有卡片了。")); main.append(stage); return; }
+
+    if (prefs.rsub === "list") {
+      stage.classList.add("wide");
+      for (const k of RCAT_ORDER) {
+        const items = list.filter(r => r.cat === k);
+        if (!items.length) continue;
+        stage.append(h("div", { class: "cat-head" }, h("h2", null, RCATS[k].zh), h("span", { class: "de" }, items.length + " 张")));
+        for (const r of items) {
+          const lv = level(rid(r));
+          stage.append(h("div", { class: "rule-row" },
+            lv ? h("span", { class: "dot " + (lv === 3 ? "ok" : lv === 1 ? "bad" : "mid") }) : null,
+            h("div", { class: "rule-q" }, r.q),
+            h("div", { class: "rule-a" }, r.a),
+            r.de ? h("div", { class: "de" }, r.de) : null,
+            r.note ? h("div", { class: "rule-note" }, r.note) : null));
+        }
+      }
+      main.append(stage);
+      return;
+    }
+
+    if (!current || !list.some(r => r.id === current.id)) {
+      current = pick(list, rid); revealed = false; answered = false;
+      if (prefs.rsub === "quiz") current._opts = shuffle([current, ...ruleDistractors(current, 3)]);
+    }
+    const r = current;
+
+    if (prefs.rsub === "cards") {
+      const big = h("div", { class: "big rule", onclick: () => { if (!revealed) { revealed = true; render(); } } },
+        h("div", { class: "nr" }, RCATS[r.cat].zh), ruleImg(r), h("div", { class: "rule-q" }, r.q));
+      if (!revealed) {
+        big.append(h("div", { class: "hint" }, "想好答案，点卡片或按空格翻面"));
+      } else {
+        big.append(h("div", { class: "zh" }, r.a), r.de ? h("div", { class: "de" }, r.de) : null, r.note ? h("p", { class: "meaning" }, r.note) : null);
+      }
+      stage.append(big);
+      if (!revealed) {
+        stage.append(h("div", { class: "actions" }, h("button", { class: "btn primary", onclick: () => { revealed = true; render(); } }, "翻面")));
+        stage.append(h("div", { class: "kbd" }, h("kbd", null, "空格"), " 翻面"));
+      } else {
+        stage.append(h("div", { class: "actions" },
+          h("button", { class: "btn bad", onclick: () => answerRule(false) }, "没记住"),
+          h("button", { class: "btn ok", onclick: () => answerRule(true) }, "记住了")));
+        stage.append(h("div", { class: "kbd" }, h("kbd", null, "1"), " 没记住　", h("kbd", null, "2"), " 记住了"));
+      }
+    } else {
+      const opts = r._opts;
+      stage.append(h("div", { class: "score" }, "本轮 ", h("b", null, session.right), " 对 / ", h("b", null, session.wrong), " 错"));
+      stage.append(h("div", { class: "big rule", style: "cursor:default;min-height:0" }, h("div", { class: "nr" }, RCATS[r.cat].zh), ruleImg(r), h("div", { class: "rule-q" }, r.q)));
+      const optsBox = h("div", { class: "quiz-opts" });
+      opts.forEach((o, i) => optsBox.append(h("button", { class: "opt", onclick: () => answerRuleQuiz(o, i) }, h("span", { class: "k" }, i + 1), h("span", null, o.a))));
+      stage.append(optsBox);
+      if (answered) {
+        const btns = optsBox.querySelectorAll(".opt");
+        btns.forEach((b, i) => { b.disabled = true; if (opts[i].id === r.id) b.classList.add("right"); else if (i === r._chosen) b.classList.add("wrong"); });
+        const good = opts[r._chosen].id === r.id;
+        stage.append(h("div", { class: "feedback " + (good ? "right" : "wrong") },
+          h("div", null, h("b", null, good ? "对了。" : "错了。"), " ", r.a, r.de ? h("span", { class: "de" }, " — " + r.de) : null),
+          r.note ? h("p", { style: "margin:6px 0 0" }, r.note) : null,
+          !good ? h("p", { style: "margin:6px 0 0", class: "de" }, "你选的「" + opts[r._chosen].a + "」是这道题的答案：" + opts[r._chosen].q) : null));
+        stage.append(h("div", { class: "actions" }, h("button", { class: "btn primary", onclick: nextRule }, "下一题")));
+        stage.append(h("div", { class: "kbd" }, h("kbd", null, "空格"), " 下一题"));
+      } else {
+        stage.append(h("div", { class: "kbd" }, h("kbd", null, "1"), "–", h("kbd", null, "4"), " 选择"));
+      }
+    }
+    main.append(stage);
+  }
+  function setRsub(t) { prefs.rsub = t; save(); current = null; render(); }
+  function answerRule(good) { mark(rid(current), good); lastId = rid(current); current = null; revealed = false; render(); }
+  function answerRuleQuiz(o, i) {
+    if (answered) return;
+    answered = true;
+    current._chosen = i;
+    const good = o.id === current.id;
+    mark(rid(current), good);
+    if (good) session.right++; else session.wrong++;
+    render();
+  }
+  function nextRule() { lastId = rid(current); current = null; answered = false; render(); }
+
   // ---------------------------------------------------------------- 主渲染
 
   function render() {
@@ -271,6 +405,7 @@
     main.innerHTML = "";
     if (prefs.mode === "browse") renderBrowse(main);
     else if (prefs.mode === "cards") renderCards(main);
+    else if (prefs.mode === "rules") renderRules(main);
     else renderQuiz(main);
   }
 
@@ -292,6 +427,15 @@
     } else if (prefs.mode === "quiz") {
       if ((e.key === " " || e.key === "Enter") && answered) { e.preventDefault(); nextQuiz(); }
       else if (!answered && /^[1-4]$/.test(e.key)) { const i = +e.key - 1; if (current._opts[i]) answerQuiz(current._opts[i], i); }
+    } else if (prefs.mode === "rules" && current) {
+      if (prefs.rsub === "cards") {
+        if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!revealed) { revealed = true; render(); } }
+        else if (revealed && e.key === "1") answerRule(false);
+        else if (revealed && e.key === "2") answerRule(true);
+      } else if (prefs.rsub === "quiz") {
+        if ((e.key === " " || e.key === "Enter") && answered) { e.preventDefault(); nextRule(); }
+        else if (!answered && /^[1-4]$/.test(e.key)) { const i = +e.key - 1; if (current._opts[i]) answerRuleQuiz(current._opts[i], i); }
+      }
     }
   });
 
