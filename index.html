@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>德国路标 · 理论考试自练</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>德国路标</h1>
+    <span class="sub">Verkehrszeichen · 理论考试自练</span>
+  </div>
+  <nav class="modes" role="tablist">
+    <button data-mode="browse" class="on">浏览</button>
+    <button data-mode="cards">翻卡</button>
+    <button data-mode="quiz">测验</button>
+  </nav>
+</header>
+
+<section class="filters">
+  <div class="chips" id="cats"></div>
+  <label class="toggle"><input type="checkbox" id="coreOnly" checked> 只看考试重点</label>
+  <label class="toggle"><input type="checkbox" id="hideKnown"> 隐藏已掌握</label>
+  <input type="search" id="search" placeholder="搜索编号 / 德文 / 中文…" autocomplete="off">
+  <div class="stat" id="stat"></div>
+</section>
+
+<main id="main"></main>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <button class="close" id="modalClose" aria-label="关闭">×</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<footer class="foot">
+  <span>自练用。路标图为德国官方设计（公共领域），带 <em>示意</em> 标记的是脚本画的简化版。</span>
+  <button id="reset" class="link">清除学习记录</button>
+</footer>
+
+<script src="signs/signs.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
