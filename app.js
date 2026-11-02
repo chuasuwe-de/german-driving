@@ -28,8 +28,10 @@
     try { return JSON.parse(localStorage.getItem(key)) || dflt; } catch (e) { return dflt; }
   }
   function save() {
-    localStorage.setItem(STORE_KEY, JSON.stringify(progress));
-    localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(progress));
+      localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
+    } catch (e) { /* 隐私模式或沙箱里可能没有 localStorage，照常用，只是不记录 */ }
   }
 
   function rec(id) { return progress[id] || { ok: 0, bad: 0, streak: 0, t: 0 }; }
@@ -415,7 +417,13 @@
   $("#search").addEventListener("input", e => { search = e.target.value; render(); });
   $("#modalClose").addEventListener("click", closeDetail);
   $("#modal").addEventListener("click", e => { if (e.target === $("#modal")) closeDetail(); });
-  $("#reset").addEventListener("click", () => { if (confirm("清除所有学习记录？")) { progress = {}; session = { right: 0, wrong: 0 }; save(); render(); } });
+  // 沙箱里 confirm() 不可用，所以用「点两次」确认
+  let resetArmed = null;
+  $("#reset").addEventListener("click", e => {
+    if (resetArmed) { clearTimeout(resetArmed); resetArmed = null; progress = {}; session = { right: 0, wrong: 0 }; save(); e.target.textContent = "清除学习记录"; render(); return; }
+    e.target.textContent = "再点一次确认清除";
+    resetArmed = setTimeout(() => { resetArmed = null; e.target.textContent = "清除学习记录"; }, 3000);
+  });
 
   document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT") return;

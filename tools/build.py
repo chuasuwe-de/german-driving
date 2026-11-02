@@ -87,7 +87,36 @@ def main():
             with open(readme, "w", encoding="utf-8") as f:
                 f.write(new)
 
-    print(f"写入 signs/signs.js：{total} 个标志，{core} 个重点，{drawn} 个自绘；{len(rules['rules'])} 张规则卡片")
+    # 单文件版 artifact.html：CSS、JS、数据和图全部内嵌，发布到 claude.ai 或随手发给别人用
+    import base64
+    one = json.loads(json.dumps(data))
+    for s in one["signs"]:
+        with open(os.path.join(img_dir, s["id"] + ".svg"), "rb") as f:
+            s["img"] = "data:image/svg+xml;base64," + base64.b64encode(f.read()).decode("ascii")
+    with open(os.path.join(ROOT, "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    with open(os.path.join(ROOT, "app.css"), encoding="utf-8") as f:
+        css = f.read()
+    with open(os.path.join(ROOT, "app.js"), encoding="utf-8") as f:
+        js = f.read()
+    blob = json.dumps(one, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    # 发布到 claude.ai 的版本不带 html/head/body 外壳（平台会套），title 和 style 放最前面
+    body = html[html.index("<body>") + len("<body>"):html.index("</body>")]
+    body = body.replace('<script src="signs/signs.js"></script>', "<script>window.SIGN_DATA = " + blob + ";</script>")
+    body = body.replace('<script src="app.js"></script>', "<script>\n" + js.replace("</script", "<\\/script") + "\n</script>")
+    frag = ('<title>德国路标自练</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n'
+            "<style>\n" + css + "\n</style>" + body)
+    with open(os.path.join(ROOT, "artifact.html"), "w", encoding="utf-8") as f:
+        f.write(frag)
+    # 单文件完整版，双击就能开
+    full = html.replace('<link rel="stylesheet" href="app.css">', "<style>\n" + css + "\n</style>")
+    full = full.replace('<script src="signs/signs.js"></script>', "<script>window.SIGN_DATA = " + blob + ";</script>")
+    full = full.replace('<script src="app.js"></script>', "<script>\n" + js.replace("</script", "<\\/script") + "\n</script>")
+    with open(os.path.join(ROOT, "standalone.html"), "w", encoding="utf-8") as f:
+        f.write(full)
+
+    print(f"写入 signs/signs.js：{total} 个标志，{core} 个重点，{drawn} 个自绘；{len(rules['rules'])} 张规则卡片；"
+          f"standalone.html {os.path.getsize(os.path.join(ROOT, 'standalone.html')) // 1024} KB")
 
 
 if __name__ == "__main__":
