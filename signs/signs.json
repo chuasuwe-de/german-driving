@@ -134,7 +134,7 @@
 {"id":"296","nr":"296","de":"Einseitige Fahrstreifenbegrenzung","zh":"单侧实线","cat":"markierung","core":true,"meaning":"实线+虚线并列：虚线一侧的车可以跨越（比如超车），实线一侧的不能。"},
 {"id":"297","nr":"297","de":"Pfeilmarkierungen","zh":"导向箭头","cat":"markierung","core":true,"meaning":"路口前的箭头规定了该车道的行驶方向，必须遵守。箭头只是预告时（点状箭头）还可以换道。"},
 {"id":"298","nr":"298","de":"Sperrfläche","zh":"禁驶区（导流区）","cat":"markierung","core":true,"meaning":"斜线填充的区域禁止驶入、禁止停车。"},
-{"id":"299","nr":"299","de":"Grenzmarkierung für Halt- und Parkverbote","zh":"禁停区标线（锯齿线）","cat":"markierung","core":true,"meaning":"锯齿线范围内禁止 Parken（有时也禁止 Halten），常见于公交站。"},
+{"id":"299","nr":"299","de":"Grenzmarkierung für Halt- und Parkverbote","zh":"禁停区标线（锯齿线）","cat":"markierung","core":true,"meaning":"锯齿线本身不规定禁的是 Halten 还是 Parken，它只是把这个地方已有禁令的范围画出来。公交站的锯齿线：禁的是 Parken（站牌前后 15 m），短停上下客可以，但不能妨碍公交车。斑马线前、消防通道这类本来就禁止 Halten 的地方，锯齿线范围内连短停都不行。"},
 {"id":"340","nr":"340","de":"Leitlinie","zh":"虚线","cat":"markierung","core":true,"meaning":"车道虚线：可以跨越，前提是安全。"},
 {"id":"341","nr":"341","de":"Wartelinie","zh":"等待线","cat":"markierung","core":false,"meaning":"让行时建议停车等待的位置（白色短块线）。"},
 
